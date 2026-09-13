@@ -673,6 +673,45 @@ test("COMPARED_FIELDS contains expected fields", () => {
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+console.log("\n── identifier normalization and evidence ──");
+
+test("normalizes common DOI representations", () => {
+  assert.strictEqual(lib.normalizeDoi("https://doi.org/10.1145/ABC.123"), "10.1145/abc.123");
+  assert.strictEqual(lib.normalizeDoi("doi: 10.1000/Test."), "10.1000/test");
+  assert.strictEqual(lib.normalizeDoi("{10.5555/123}"), "10.5555/123");
+});
+
+test("normalizes modern and legacy arXiv identifiers", () => {
+  assert.strictEqual(lib.normalizeArxivId("https://arxiv.org/abs/1706.03762v7"), "1706.03762");
+  assert.strictEqual(lib.normalizeArxivId("arXiv:cs/9901001v2"), "cs/9901001");
+});
+
+test("exact DOI produces high-confidence evidence", () => {
+  const original = { title: "Slightly Different Title", doi: "https://doi.org/10.1/XYZ" };
+  const found = { title: "Different title punctuation", doi: "10.1/xyz", _source: "crossref" };
+  const result = lib.assessCandidate(original, found);
+  assert.strictEqual(result.decision, "high");
+  assert.ok(result.confidence >= 98);
+  assert.ok(result.reasons.includes("Exact DOI match"));
+});
+
+test("conflicting DOI is never accepted as the same paper", () => {
+  const original = { title: "Same Title", doi: "10.1/a" };
+  const found = { title: "Same Title", doi: "10.1/b" };
+  assert.strictEqual(lib.assessCandidate(original, found).decision, "conflict");
+  assert.strictEqual(lib.isSamePaper(original, found), false);
+});
+
+test("evidence matcher prefers the exact DOI candidate", () => {
+  const original = { title: "A Useful Paper", author: "Smith, A", year: "2024", doi: "10.1/right" };
+  const candidates = [
+    { title: "A Useful Paper", author: "Smith, A", year: "2024", doi: "10.1/wrong", _source: "crossref" },
+    { title: "A Useful Paper Extended", doi: "10.1/right", _source: "openalex" },
+  ];
+  assert.strictEqual(lib.bestEvidenceMatch(candidates, original).candidate.doi, "10.1/right");
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 console.log("\n── cleanNote ──");
 
 test("returns empty for falsy input", () => {

@@ -43,6 +43,9 @@ Runs **100% in your browser** — no install, no server, no account. Only paper 
 
 - **Drag-and-drop** or **paste** BibTeX from Overleaf
 - **Multi-source** checks (Semantic Scholar + CrossRef, with OpenAlex fallback)
+- **DOI-first verification** before fuzzy title matching
+- **Explainable confidence** with title, author, year, identifier, and source signals
+- **Evidence report export** for reproducible research-group review
 - **Hallucination detection** — titles that don’t exist in major indexes
 - **Pill-style diffs** — choose your text vs. suggested metadata per field
 - **Live BibTeX preview** with diff highlighting; **copy** or **download** the final file
@@ -62,7 +65,7 @@ Upload or paste .bib → Parse entries → For each entry:
 → You edit choices → Export corrected .bib
 ```
 
-**Statuses:** **Verified** (matches online record) · **Auto-updated** (same paper, metadata differs) · **Needs review** (weak title match — possible typo or fake cite) · **Not found** (no index hit).
+**Statuses:** **Verified** (strongly matches an online record) · **Suggested updates** (same work, metadata differs) · **Needs review** (weak or conflicting evidence) · **Unresolved** (no index hit). An unresolved entry is not automatically a fabricated citation; theses, workshops, webpages, and recent publications may not be indexed.
 
 ---
 

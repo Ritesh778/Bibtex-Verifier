@@ -243,6 +243,25 @@
 
   function normalizePages(p) { return p.trim().replace(/\s*-+\s*/g, "-"); }
 
+  function normalizeDoi(value) {
+    if (!value) return "";
+    return String(value)
+      .trim()
+      .replace(/^\{+|\}+$/g, "")
+      .replace(/^doi:\s*/i, "")
+      .replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, "")
+      .trim()
+      .replace(/[.,;]+$/, "")
+      .toLowerCase();
+  }
+
+  function normalizeArxivId(value) {
+    if (!value) return "";
+    const cleaned = String(value).trim().replace(/^https?:\/\/arxiv\.org\/(?:abs|pdf)\//i, "");
+    const match = cleaned.match(/(?:arxiv:\s*)?([a-z-]+(?:\.[a-z-]+)?\/\d{7}|\d{4}\.\d{4,5})(?:v\d+)?/i);
+    return match ? match[1].toLowerCase() : "";
+  }
+
   // ─── Field comparison ────────────────────────────────────────────────
   function compareAuthors(a, b) {
     const sa = normalizeAuthorSet(a), sb = normalizeAuthorSet(b);
@@ -257,7 +276,8 @@
     const na = normalizeText(a), nb = normalizeText(b);
     if (!na && !nb) return 100;
     if (!na || !nb) return 0;
-    if (field === "year" || field === "doi") return na === nb ? 100 : 0;
+    if (field === "year") return na === nb ? 100 : 0;
+    if (field === "doi") return normalizeDoi(a) === normalizeDoi(b) ? 100 : 0;
     if (field === "author") return compareAuthors(a, b);
     if (field === "pages") return normalizePages(na) === normalizePages(nb) ? 100 : tokenSortRatio(na, nb);
     return tokenSortRatio(na, nb);
@@ -505,6 +525,8 @@
   }
 
   function isSamePaper(a, b) {
+    const doiA = normalizeDoi(a?.doi), doiB = normalizeDoi(b?.doi);
+    if (doiA && doiB) return doiA === doiB;
     if (titleSimilarity(a.title || "", b.title || "") < 85) return false;
     if (a.year && b.year) {
       const ya = parseInt(a.year, 10), yb = parseInt(b.year, 10);
@@ -517,6 +539,60 @@
       if (inter / Math.max(aa.size, ba.size) < 0.3) return false;
     }
     return true;
+  }
+
+  /** Explainable confidence assessment for one candidate publication record. */
+  function assessCandidate(original, candidate, sourceCount = 1) {
+    const doiA = normalizeDoi(original?.doi), doiB = normalizeDoi(candidate?.doi);
+    const title = titleSimilarity(
+      normalizeTitle(original?.title || ""),
+      normalizeTitle(candidate?.title || ""),
+    );
+    const authors = compareAuthors(original?.author || "", candidate?.author || "");
+    const year = original?.year && candidate?.year
+      ? compareField("year", original.year, candidate.year)
+      : null;
+
+    if (doiA && doiB && doiA !== doiB) {
+      return {
+        confidence: 0,
+        decision: "conflict",
+        reasons: ["DOI conflicts with the matched database record"],
+        signals: { doi: "conflict", title, authors, year, sources: sourceCount },
+      };
+    }
+
+    let confidence = title * 0.60;
+    const reasons = [`Title similarity ${Math.round(title)}%`];
+    if (authors > 0) { confidence += authors * 0.20; reasons.push(`Author agreement ${Math.round(authors)}%`); }
+    if (year !== null) { confidence += year * 0.10; reasons.push(year === 100 ? "Year agrees" : "Year differs"); }
+    confidence += Math.min(Math.max(sourceCount - 1, 0) * 5, 10);
+    if (sourceCount > 1) reasons.push(`${sourceCount} independent sources agree`);
+    if (doiA && doiB && doiA === doiB) {
+      confidence = Math.max(confidence, 98);
+      reasons.unshift("Exact DOI match");
+    }
+    confidence = Math.round(Math.min(100, confidence));
+
+    return {
+      confidence,
+      decision: confidence >= 90 ? "high" : confidence >= 75 ? "medium" : "low",
+      reasons,
+      signals: { doi: doiA && doiB ? "exact" : "unavailable", title, authors, year, sources: sourceCount },
+    };
+  }
+
+  /** Select the strongest candidate using identifiers plus bibliographic evidence. */
+  function bestEvidenceMatch(candidates, original) {
+    let winner = null;
+    for (const candidate of candidates || []) {
+      const sourceCount = new Set(String(candidate._source || "").split("+").filter(Boolean)).size || 1;
+      const assessment = assessCandidate(original, candidate, sourceCount);
+      if (assessment.decision === "conflict") continue;
+      if (!winner || assessment.confidence > winner.assessment.confidence)
+        winner = { candidate, assessment };
+    }
+    return winner && winner.assessment.confidence >= 60 ? winner : null;
   }
 
   function mergeMetadata(primary, secondary) {
@@ -719,6 +795,8 @@
   exports.normalizeText = normalizeText;
   exports.normalizeAuthorSet = normalizeAuthorSet;
   exports.normalizePages = normalizePages;
+  exports.normalizeDoi = normalizeDoi;
+  exports.normalizeArxivId = normalizeArxivId;
   exports.compareAuthors = compareAuthors;
   exports.compareField = compareField;
   exports.compareEntry = compareEntry;
@@ -729,6 +807,8 @@
   exports.extractLastNames = extractLastNames;
   exports.isPreprint = isPreprint;
   exports.isSamePaper = isSamePaper;
+  exports.assessCandidate = assessCandidate;
+  exports.bestEvidenceMatch = bestEvidenceMatch;
   exports.mergeMetadata = mergeMetadata;
   exports.bestMatch = bestMatch;
   exports.abbreviateVenue = abbreviateVenue;

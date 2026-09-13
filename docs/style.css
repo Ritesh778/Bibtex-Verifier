@@ -1831,6 +1831,32 @@ code {
 
 .btn-download:hover { background: var(--accent-hover); }
 
+.btn-report {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  padding: 10px 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-report:hover { border-color: var(--accent); }
+.btn-report.hidden { display: none; }
+
+.evidence-panel {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: 0.86rem;
+}
+
+.evidence-panel summary { cursor: pointer; font-weight: 650; color: var(--text); }
+.evidence-panel ul { margin: 8px 0 0 20px; padding: 0; }
+
 .btn-download.hidden {
   display: none;
 }

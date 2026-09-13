@@ -12,6 +12,7 @@
   const OPENALEX_FIELDS = "title,display_name,publication_year,doi,authorships,primary_location,biblio,id";
   const MAX_RETRIES = 4;
   const RETRY_BASE_MS = 1500;
+  const REQUEST_TIMEOUT_MS = 15000;
 
   // Raised when a lookup can't be completed because a source kept failing
   // transiently (HTTP 429/5xx or network errors) after all retries. It lets
@@ -62,7 +63,14 @@
 
     for (let attempt = 0; attempt <= retries; attempt++) {
       try {
-        const resp = await fetch(u.toString());
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+        let resp;
+        try {
+          resp = await fetch(u.toString(), { signal: controller.signal });
+        } finally {
+          clearTimeout(timeout);
+        }
         if (resp.ok) {
           rateSuccess(source);
           return resp.json();
@@ -73,7 +81,10 @@
         if (resp.status === 429 || resp.status >= 500) {
           rateBackoff(source);
           if (attempt < retries) {
-            const wait = RETRY_BASE_MS * Math.pow(2, attempt);
+            const retryAfter = Number(resp.headers.get("Retry-After"));
+            const wait = Number.isFinite(retryAfter) && retryAfter > 0
+              ? retryAfter * 1000
+              : RETRY_BASE_MS * Math.pow(2, attempt);
             console.warn(`Transient ${resp.status} on attempt ${attempt + 1}, retrying in ${wait}ms...`);
             await sleep(wait);
             continue;
@@ -126,7 +137,29 @@
     return (data?.results || []).map(B.openAlexToStandard);
   }
 
-  async function lookupPaper(title) {
+  async function searchCrossrefByDoi(doi) {
+    const data = await fetchJSON(`${CROSSREF_API}/${encodeURIComponent(doi)}`, {});
+    return data?.message ? B.crossrefToStandard(data.message) : null;
+  }
+
+  async function searchSSByDoi(doi) {
+    const data = await fetchJSON(
+      `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(doi)}`,
+      { fields: SS_FIELDS },
+      { is404Ok: true },
+    );
+    return data ? B.ssToStandard(data) : null;
+  }
+
+  async function searchOpenAlexByDoi(doi) {
+    const data = await fetchJSON(OPENALEX_API, {
+      filter: `doi:https://doi.org/${doi}`, per_page: "3", select: OPENALEX_FIELDS,
+    });
+    return (data?.results || []).map(B.openAlexToStandard);
+  }
+
+  async function lookupPaper(entry) {
+    const title = B.stripLatex(entry.title || "");
     // Each source is attempted independently: a transient failure in one is
     // recorded but doesn't stop us from trying the others. Only if nothing
     // matches AND at least one source failed transiently do we report the
@@ -139,6 +172,29 @@
         throw err;
       }
     };
+
+    // Resolve stable identifiers before fuzzy title search. A DOI match is
+    // substantially stronger evidence and avoids false positives on short or
+    // generic paper titles.
+    const doi = B.normalizeDoi(entry.doi || "");
+    if (doi) {
+      const doiRecords = [];
+      const cr = await attemptStep(() => searchCrossrefByDoi(doi));
+      if (cr) doiRecords.push(cr);
+      const ss = await attemptStep(() => searchSSByDoi(doi));
+      if (ss) doiRecords.push(ss);
+      const oa = (await attemptStep(() => searchOpenAlexByDoi(doi))) || [];
+      doiRecords.push(...oa);
+
+      const agreeing = doiRecords.filter(r => B.normalizeDoi(r.doi) === doi);
+      if (agreeing.length) {
+        let merged = agreeing[0];
+        for (const record of agreeing.slice(1))
+          if (B.isSamePaper(merged, record)) merged = B.mergeMetadata(merged, record);
+        merged._sourceCount = new Set(agreeing.map(r => r._source)).size;
+        return merged;
+      }
+    }
 
     const ssMatch = await attemptStep(() => searchSSMatch(title));
     if (ssMatch && B.titleSimilarity(title, ssMatch.title || "") >= B.MIN_TITLE_SIM) {
@@ -225,6 +281,7 @@
   const barProgressFill = $(".bar-progress-fill");
   const barProgressText = $(".bar-progress-text");
   const btnDownload = $("#btn-download");
+  const btnReport = $("#btn-report");
   const mainColumns = $("#main-columns");
   const colPreview = $("#col-preview");
   const previewPanelEl = $("#preview-panel");
@@ -340,6 +397,7 @@
     barProgressFill.classList.remove("done");
     barProgressText.textContent = statusMsg;
     btnDownload.classList.add("hidden");
+    btnReport?.classList.add("hidden");
     btnDownload.classList.remove("fade-in");
     floatingBar.classList.add("visible");
 
@@ -406,7 +464,7 @@
         await sleep(500);
       } else {
         try {
-          found = await lookupPaper(cleanTitle);
+          found = await lookupPaper(entry);
         } catch (err) {
           if (err instanceof TransientLookupError) inconclusive = true;
           else console.warn("Lookup failed:", err);
@@ -438,7 +496,7 @@
           const retryTitle = B.stripLatex(entry.title || "");
           let found = null, inconclusive = false;
           try {
-            found = await lookupPaper(retryTitle);
+            found = await lookupPaper(entry);
           } catch (err) {
             if (err instanceof TransientLookupError) inconclusive = true;
             else console.warn("Retry lookup failed:", err);
@@ -468,6 +526,7 @@
       setTimeout(() => {
         barProgress.classList.remove("active", "fade-out");
         btnDownload.classList.remove("hidden");
+        btnReport?.classList.remove("hidden");
         btnDownload.classList.add("fade-in");
         if (resumeOnboardingAfterResults)
           setTimeout(() => openOnboardingPostVerifyTour(), 450);
@@ -487,6 +546,8 @@
       suggested,
       found_title: found ? (found.title || "") : "",
       duplicate_of: entry._duplicateOf || null,
+      confidence: found?._confidence ?? null,
+      evidence: found?._evidence || null,
     };
   }
 
@@ -494,7 +555,13 @@
   // "not_found", otherwise the entry is compared against the found record.
   function buildFoundResult(entry, index, found) {
     if (!found) return buildResult(entry, index, "not_found", 0, [], {}, null);
+    const inferredSources = new Set(String(found._source || "").split("+").filter(Boolean)).size || 1;
+    const assessment = B.assessCandidate(entry, found, found._sourceCount || inferredSources);
+    found._confidence = assessment.confidence;
+    found._evidence = assessment;
     const cmp = B.compareEntry(entry, found);
+    if (assessment.decision === "conflict" || assessment.decision === "low")
+      cmp.status = "needs_review";
     let fieldDiffs = cmp.field_diffs;
     if (cmp.status === "needs_review") fieldDiffs = B.fieldDiffsForNeedsReview(entry, found);
     return buildResult(entry, index, cmp.status, cmp.title_score, fieldDiffs, cmp.suggested, found);
@@ -502,7 +569,7 @@
 
   // ─── Rendering ────────────────────────────────────────────────────
   function statusLabel(s) {
-    return { verified: "Verified", updated: "Auto-Updated", needs_review: "Needs Review", not_found: "Not Found" }[s] || s;
+    return { verified: "Verified", updated: "Suggested Updates", needs_review: "Needs Review", not_found: "Unresolved" }[s] || s;
   }
 
   function cardMatchesFilter(card) {
@@ -680,11 +747,20 @@
         Review the suggestions below and use the checkmark on each row to adopt a value, or keep your original text.</div>`;
     }
 
+    let evidenceHTML = "";
+    if (r.evidence) {
+      const reasons = (r.evidence.reasons || []).map(reason => `<li>${esc(reason)}</li>`).join("");
+      evidenceHTML = `<details class="evidence-panel">
+        <summary>Verification evidence · ${esc(String(r.confidence))}% confidence</summary>
+        <ul>${reasons}</ul>
+      </details>`;
+    }
+
     let notFoundHintHTML = "";
     if (r.status === "not_found") {
       const hasTitle = (r.title || "").trim();
       notFoundHintHTML = `<div class="not-found-hint">${hasTitle
-        ? "No matching publication was found in CrossRef or Semantic Scholar for this title. Try fixing typos or adding missing words, then re-run verification, or check the reference manually."
+        ? "No matching publication was found in the queried indexes. This does not prove the citation is fabricated; theses, workshops, webpages, and recent papers may be missing. Check the reference manually or add a DOI."
         : "This entry has no title, so it cannot be looked up automatically. Add a title in your .bib file or verify the entry by hand."}</div>`;
     }
 
@@ -744,7 +820,7 @@
           <span class="status-tag tag-${r.status}">${statusLabel(r.status)}</span>
         </div>
       </div>
-    </div>${duplicateHTML}${reviewHintHTML}${notFoundHintHTML}${diffHTML}${actionsHTML}${searchLinks}`;
+    </div>${duplicateHTML}${reviewHintHTML}${notFoundHintHTML}${evidenceHTML}${diffHTML}${actionsHTML}${searchLinks}`;
 
     // Cache normalized search haystack so search filtering stays cheap.
     card.dataset.searchHay = `${(r.entry_id || "").toLowerCase()} ${B.stripLatex(r.title || "").toLowerCase()}`;
@@ -1595,6 +1671,34 @@
     const a = document.createElement("a");
     a.href = url;
     a.download = "verified_refs.bib";
+    a.click();
+    URL.revokeObjectURL(url);
+  });
+
+  btnReport?.addEventListener("click", () => {
+    const report = {
+      schema_version: "1.0",
+      generated_at: new Date().toISOString(),
+      tool: "BibTeX Verifier",
+      summary: results.reduce((acc, item) => {
+        acc[item.status] = (acc[item.status] || 0) + 1;
+        return acc;
+      }, {}),
+      entries: results.map(item => ({
+        citation_key: item.entry_id,
+        title: item.title,
+        status: item.status,
+        confidence: item.confidence,
+        evidence: item.evidence,
+        field_differences: item.field_diffs,
+        duplicate_of: item.duplicate_of,
+      })),
+    };
+    const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "bibtex_verification_report.json";
     a.click();
     URL.revokeObjectURL(url);
   });
