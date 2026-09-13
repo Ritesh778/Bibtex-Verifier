@@ -187,6 +187,29 @@
     return entries;
   }
 
+  /** Detect constructs that the lightweight parser cannot safely round-trip. */
+  function inspectBibSyntax(content) {
+    const errors = [], warnings = [];
+    const text = String(content || "");
+    if (/@\w+\s*\(/i.test(text))
+      errors.push("Parenthesized BibTeX entries are not yet supported; use braces around entries.");
+    if (/@(?:string|preamble)\s*[({]/i.test(text))
+      errors.push("BibTeX string macros and preambles cannot be preserved safely yet.");
+    if (/=\s*(?:\{[^}]*\}|"[^"]*"|\w+)\s*#/m.test(text))
+      errors.push("Concatenated field values using # cannot be preserved safely yet.");
+
+    const entries = parseBib(text);
+    const seen = new Set();
+    for (const entry of entries) {
+      const key = String(entry.ID || "").toLowerCase();
+      if (!key) warnings.push("An entry has an empty citation key.");
+      else if (seen.has(key)) warnings.push(`Duplicate citation key: ${entry.ID}`);
+      seen.add(key);
+      if (!entry.title) warnings.push(`Entry ${entry.ID || "(unknown)"} has no title.`);
+    }
+    return { errors: [...new Set(errors)], warnings: [...new Set(warnings)] };
+  }
+
   function entriesToBib(entries) {
     const lines = [];
     for (const entry of entries) {
@@ -789,6 +812,7 @@
   exports.stripLatex = stripLatex;
   exports.normalizeTitle = normalizeTitle;
   exports.parseBib = parseBib;
+  exports.inspectBibSyntax = inspectBibSyntax;
   exports.entriesToBib = entriesToBib;
   exports.tokenSortRatio = tokenSortRatio;
   exports.titleSimilarity = titleSimilarity;

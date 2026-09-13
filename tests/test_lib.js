@@ -181,6 +181,20 @@ test("parses misc Cursor-style malformed braces", () => {
   assert.strictEqual(entries[0].title, "{Cursor: The AI Code Editor}");
 });
 
+test("flags unsupported syntax before lossy export", () => {
+  const macro = '@string{venue = "ACL"}\n@article{x, title={Test}, booktitle=venue}';
+  assert.ok(lib.inspectBibSyntax(macro).errors.length > 0);
+  assert.ok(lib.inspectBibSyntax('@article(x, title={Test})').errors.length > 0);
+  assert.ok(lib.inspectBibSyntax('@article{x, title={A} # {B}}').errors.length > 0);
+});
+
+test("reports duplicate citation keys as warnings", () => {
+  const bib = '@article{x, title={One}}\n@article{x, title={Two}}';
+  const result = lib.inspectBibSyntax(bib);
+  assert.strictEqual(result.errors.length, 0);
+  assert.ok(result.warnings.some(w => w.includes("Duplicate citation key")));
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 console.log("\n── entriesToBib ──");
 

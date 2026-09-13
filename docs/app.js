@@ -13,6 +13,9 @@
   const MAX_RETRIES = 4;
   const RETRY_BASE_MS = 1500;
   const REQUEST_TIMEOUT_MS = 15000;
+  const MAX_FILE_BYTES = 5 * 1024 * 1024;
+  const MAX_ENTRIES = 5000;
+  const lookupCache = new Map();
 
   // Raised when a lookup can't be completed because a source kept failing
   // transiently (HTTP 429/5xx or network errors) after all retries. It lets
@@ -160,6 +163,8 @@
 
   async function lookupPaper(entry) {
     const title = B.stripLatex(entry.title || "");
+    const cacheKey = B.normalizeDoi(entry.doi || "") || B.normalizeTitle(title);
+    if (cacheKey && lookupCache.has(cacheKey)) return lookupCache.get(cacheKey);
     // Each source is attempted independently: a transient failure in one is
     // recorded but doesn't stop us from trying the others. Only if nothing
     // matches AND at least one source failed transiently do we report the
@@ -192,32 +197,50 @@
         for (const record of agreeing.slice(1))
           if (B.isSamePaper(merged, record)) merged = B.mergeMetadata(merged, record);
         merged._sourceCount = new Set(agreeing.map(r => r._source)).size;
+        if (cacheKey) lookupCache.set(cacheKey, merged);
         return merged;
       }
     }
 
-    const ssMatch = await attemptStep(() => searchSSMatch(title));
-    if (ssMatch && B.titleSimilarity(title, ssMatch.title || "") >= B.MIN_TITLE_SIM) {
-      const crCandidates = (await attemptStep(() => searchCrossref(title))) || [];
-      const crMatch = B.bestMatch(crCandidates, title);
-      if (crMatch && B.isSamePaper(ssMatch, crMatch))
-        return B.mergeMetadata(ssMatch, crMatch);
-      return ssMatch;
+    // Query independent indexes before deciding. This prevents the first API
+    // to respond from becoming the answer merely because of source order.
+    const [ssMatch, crCandidates, oaCandidates] = await Promise.all([
+      attemptStep(() => searchSSMatch(title)),
+      attemptStep(() => searchCrossref(title)),
+      attemptStep(() => searchOpenAlex(title)),
+    ]);
+    const candidates = [];
+    if (ssMatch) candidates.push(ssMatch);
+    const crMatch = B.bestMatch(crCandidates || [], title);
+    const oaMatch = B.bestMatch(oaCandidates || [], title);
+    if (crMatch) candidates.push(crMatch);
+    if (oaMatch) candidates.push(oaMatch);
+
+    if (!candidates.length) {
+      const ssCandidates = (await attemptStep(() => searchSSSearch(title))) || [];
+      const ssSearchMatch = B.bestMatch(ssCandidates, title);
+      if (ssSearchMatch) candidates.push(ssSearchMatch);
     }
 
-    const crCandidates = (await attemptStep(() => searchCrossref(title))) || [];
-    const crMatch = B.bestMatch(crCandidates, title);
-    if (crMatch) return crMatch;
-
-    const oaCandidates = (await attemptStep(() => searchOpenAlex(title))) || [];
-    const oaMatch = B.bestMatch(oaCandidates, title);
-    if (oaMatch) return oaMatch;
-
-    const ssCandidates = (await attemptStep(() => searchSSSearch(title))) || [];
-    const ssSearchMatch = B.bestMatch(ssCandidates, title);
-    if (ssSearchMatch) return ssSearchMatch;
+    const clusters = [];
+    for (const candidate of candidates) {
+      const cluster = clusters.find(item => B.isSamePaper(item.record, candidate));
+      if (!cluster) {
+        clusters.push({ record: candidate, sources: new Set([candidate._source]) });
+      } else {
+        cluster.record = B.mergeMetadata(cluster.record, candidate);
+        cluster.sources.add(candidate._source);
+      }
+    }
+    for (const cluster of clusters) cluster.record._sourceCount = cluster.sources.size;
+    const winner = B.bestEvidenceMatch(clusters.map(cluster => cluster.record), entry);
+    if (winner) {
+      if (cacheKey) lookupCache.set(cacheKey, winner.candidate);
+      return winner.candidate;
+    }
 
     if (transient) throw new TransientLookupError("inconclusive lookup");
+    if (cacheKey) lookupCache.set(cacheKey, null);
     return null;
   }
 
@@ -245,6 +268,8 @@
   let fieldEdits = {};
   let activeFilter = "all";
   let activeSearch = "";
+  let originalInputContent = "";
+  let syntaxDiagnostics = { errors: [], warnings: [] };
 
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => document.querySelectorAll(sel);
@@ -352,6 +377,7 @@
 
   async function handleFile(file) {
     if (!file.name.endsWith(".bib")) { alert("Please upload a .bib file."); return; }
+    if (file.size > MAX_FILE_BYTES) { alert("This file is larger than 5 MB. Split it into smaller bibliographies before verification."); return; }
     const content = await file.text();
     startVerificationFromContent(content, "Reading file...");
   }
@@ -373,6 +399,14 @@
       document.body.dataset.onboardingStage === "verify-final";
     pendingOnboardingResumeClick = false;
     delete document.body.dataset.onboardingStage;
+
+    const syntax = B.inspectBibSyntax(content);
+    if (syntax.errors.length) {
+      alert(`This file uses syntax that cannot yet be exported safely:\n\n- ${syntax.errors.join("\n- ")}\n\nNo changes were made.`);
+      return;
+    }
+    originalInputContent = content;
+    syntaxDiagnostics = syntax;
 
     closeOnboarding();
     results = [];
@@ -412,6 +446,12 @@
 
     if (!parsedEntries.length) {
       alert("No BibTeX entries found. Make sure the content contains valid @type{key, ...} entries.");
+      floatingBar.classList.remove("visible");
+      onboardingResumeAfterCurrentRun = false;
+      return;
+    }
+    if (parsedEntries.length > MAX_ENTRIES) {
+      alert(`This bibliography contains ${parsedEntries.length} entries. The safe limit is ${MAX_ENTRIES}; split the file and try again.`);
       floatingBar.classList.remove("visible");
       onboardingResumeAfterCurrentRun = false;
       return;
@@ -1675,11 +1715,17 @@
     URL.revokeObjectURL(url);
   });
 
-  btnReport?.addEventListener("click", () => {
+  btnReport?.addEventListener("click", async () => {
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(originalInputContent));
+    const inputSha256 = [...new Uint8Array(digest)].map(byte => byte.toString(16).padStart(2, "0")).join("");
     const report = {
       schema_version: "1.0",
       generated_at: new Date().toISOString(),
       tool: "BibTeX Verifier",
+      tool_version: "0.1.0",
+      input_sha256: inputSha256,
+      sources: ["Crossref", "Semantic Scholar", "OpenAlex"],
+      parser_warnings: syntaxDiagnostics.warnings,
       summary: results.reduce((acc, item) => {
         acc[item.status] = (acc[item.status] || 0) + 1;
         return acc;
