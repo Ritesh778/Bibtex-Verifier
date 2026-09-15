@@ -78,6 +78,23 @@ def assess(
             signals=signals,
         )
 
+    if (
+        original_doi
+        and candidate_doi
+        and original_doi == candidate_doi
+        and original.title
+        and candidate.title
+        and title_score < 60
+    ):
+        signals["doi"] = "exact"
+
+        return Evidence(
+            confidence=0,
+            decision="conflict",
+            reasons=["DOI resolves to a publication with a substantially different title"],
+            signals=signals,
+        )
+
     confidence = title_score * 0.60
     reasons = [f"Title similarity {round(title_score)}%"]
 
@@ -99,11 +116,22 @@ def assess(
         reasons.append(f"{source_count} independent sources agree")
 
     if original_doi and candidate_doi and original_doi == candidate_doi:
-        confidence = max(confidence, 98)
+        confidence = max(
+            confidence,
+            98,
+        )
         signals["doi"] = "exact"
-        reasons.insert(0, "Exact DOI match")
+        reasons.insert(
+            0,
+            "Exact DOI match",
+        )
 
-    final_score = round(min(100, confidence))
+    final_score = round(
+        min(
+            100,
+            confidence,
+        )
+    )
 
     if final_score >= 90:
         decision = "high"

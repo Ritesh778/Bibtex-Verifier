@@ -27,12 +27,12 @@ def test_author_similarity_uses_surnames() -> None:
 
 def test_exact_doi_is_high_confidence() -> None:
     original = Publication(
-        title="Working title",
+        title="Evidence-Based Citation Verification",
         doi="https://doi.org/10.1/ABC",
     )
 
     candidate = Publication(
-        title="Published title",
+        title="Evidence Based Citation Verification",
         doi="10.1/abc",
     )
 
@@ -44,6 +44,28 @@ def test_exact_doi_is_high_confidence() -> None:
     assert evidence.confidence >= 98
     assert evidence.decision == "high"
     assert evidence.signals["doi"] == "exact"
+
+
+def test_exact_doi_with_unrelated_title_is_conflict() -> None:
+    original = Publication(
+        title="Deep Learning for Computer Vision",
+        doi="10.18653/v1/N19-1423",
+    )
+
+    candidate = Publication(
+        title=("BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding"),
+        doi="10.18653/v1/N19-1423",
+    )
+
+    evidence = assess(
+        original,
+        candidate,
+    )
+
+    assert evidence.confidence == 0
+    assert evidence.decision == "conflict"
+    assert evidence.signals["doi"] == "exact"
+    assert "different title" in evidence.reasons[0]
 
 
 def test_conflicting_dois_are_rejected() -> None:
