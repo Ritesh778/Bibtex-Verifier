@@ -2,6 +2,7 @@
   "use strict";
 
   const B = window.BibLib;
+  const BACKEND = window.BibBackend;
 
   // ─── Configuration ───────────────────────────────────────────────────
   const CROSSREF_API = "https://api.crossref.org/works";
@@ -367,110 +368,167 @@
   async function runVerification() {
     const total = parsedEntries.length;
     const seenTitles = new Map();
-    // Entry indices whose lookup was inconclusive (a source failed transiently);
-    // re-checked in a second pass once rate-limit pressure eases.
-    const pendingRetry = [];
+
+    barProgressText.textContent =
+      `Sending ${total} ${
+        total === 1 ? "entry" : "entries"
+      } to the Python verifier...`;
+
+    let backendReport;
+
+    try {
+      backendReport = await BACKEND.verifyBibtex(
+        B.entriesToBib(parsedEntries)
+      );
+    } catch (error) {
+      console.error(
+        "Backend verification failed:",
+        error
+      );
+
+      barProgress.classList.remove(
+        "active",
+        "fade-out"
+      );
+
+      floatingBar.classList.remove("visible");
+
+      alert(
+        error.message ||
+        "The Python verification service is unavailable."
+      );
+
+      return;
+    }
+
+    const backendEntries = Array.isArray(
+      backendReport.entries
+    )
+      ? backendReport.entries
+      : [];
 
     for (let i = 0; i < total; i++) {
       const entry = parsedEntries[i];
       const title = entry.title || "";
-      const entryId = entry.ID || `entry_${i}`;
+      const entryId =
+        entry.ID || `entry_${i}`;
 
-      const normKey = B.normalizeTitle(title);
-      if (normKey && seenTitles.has(normKey)) {
-        entry._duplicateOf = seenTitles.get(normKey);
-      } else if (normKey) {
-        seenTitles.set(normKey, entryId);
+      const normalizedTitle =
+        B.normalizeTitle(title);
+
+      if (
+        normalizedTitle &&
+        seenTitles.has(normalizedTitle)
+      ) {
+        entry._duplicateOf =
+          seenTitles.get(normalizedTitle);
+      } else if (normalizedTitle) {
+        seenTitles.set(
+          normalizedTitle,
+          entryId
+        );
       }
 
-      const pct = Math.round(((i + 1) / total) * 100);
-      barProgressFill.style.width = pct + "%";
-      barProgressText.textContent = `Verifying ${i + 1} / ${total}: ${title.slice(0, 50)}…`;
+      const percentage = Math.round(
+        ((i + 1) / total) * 100
+      );
 
-      if (!title.trim()) {
-        const r = buildResult(entry, i, "not_found", 0, [], {}, null);
-        results.push(r);
-        renderEntryCard(r);
+      barProgressFill.style.width =
+        `${percentage}%`;
+
+      barProgressText.textContent =
+        `Processing ${i + 1} / ${total}: ` +
+        `${title.slice(0, 50)}…`;
+
+      if (!title.trim() && !entry.doi) {
+        const result = buildResult(
+          entry,
+          i,
+          "not_found",
+          0,
+          [],
+          {},
+          null
+        );
+
+        results.push(result);
+        renderEntryCard(result);
         updateSummary();
         updatePreview();
         continue;
       }
 
-      const cleanTitle = B.stripLatex(title);
-      let found = null, inconclusive = false;
-      // Tour shortcut: the fabricated sample entry has a unique marker. Skip the
-      // real network lookup so the onboarding flow doesn't stall on a guaranteed
-      // miss; pause briefly so the "not found" status still feels deliberate.
-      const isTourFakeEntry = /QZX999/i.test(cleanTitle);
-      if (isTourFakeEntry) {
-        await sleep(500);
-      } else {
-        try {
-          found = await lookupPaper(cleanTitle);
-        } catch (err) {
-          if (err instanceof TransientLookupError) inconclusive = true;
-          else console.warn("Lookup failed:", err);
-        }
-      }
+      const backendResult =
+        backendEntries[i];
 
-      const r = buildFoundResult(entry, i, found);
-      if (inconclusive) { r._inconclusive = true; pendingRetry.push(i); }
-      results.push(r);
-      renderEntryCard(r);
+      const found =
+        BACKEND.resultToFound(
+          backendResult
+        );
+        if (
+            found &&
+            entry.booktitle &&
+            !entry.journal &&
+            found.journal
+        ) {
+            found.booktitle = found.journal;
+            found.journal = "";
+          }
 
+      const result = buildFoundResult(
+        entry,
+        i,
+        found
+      );
+
+      results.push(result);
+      renderEntryCard(result);
       updateSummary();
       updateAuthorPills();
       updatePreview();
     }
 
-    // Second pass: some entries came back inconclusive because a source was
-    // rate-limited or briefly unreachable during the busy first pass. Re-check
-    // them now that the adaptive limiter has recovered, so real papers aren't
-    // left flagged as "not found" (the flakiness users saw across reruns).
-    if (pendingRetry.length) {
-      barProgressText.textContent =
-        `Re-checking ${pendingRetry.length} ${pendingRetry.length === 1 ? "entry" : "entries"}…`;
-      await sleep(1200);
-      for (let round = 0; round < 2 && pendingRetry.length; round++) {
-        const stillPending = [];
-        for (const i of pendingRetry) {
-          const entry = parsedEntries[i];
-          const retryTitle = B.stripLatex(entry.title || "");
-          let found = null, inconclusive = false;
-          try {
-            found = await lookupPaper(retryTitle);
-          } catch (err) {
-            if (err instanceof TransientLookupError) inconclusive = true;
-            else console.warn("Retry lookup failed:", err);
-          }
-          // Keep deferring only while still inconclusive and a round remains.
-          if (inconclusive && round === 0) { stillPending.push(i); continue; }
-          const r = buildFoundResult(entry, i, found);
-          const at = results.findIndex(x => x.index === i);
-          if (at >= 0) results[at] = r; else results.push(r);
-          renderEntryCard(r);
-          updateSummary();
-          updateAuthorPills();
-          updatePreview();
-        }
-        pendingRetry.length = 0;
-        pendingRetry.push(...stillPending);
-        if (pendingRetry.length) await sleep(1500);
-      }
-    }
-
     barProgressFill.classList.add("done");
-    barProgressText.textContent = `Done — ${total} entries verified`;
-    const resumeOnboardingAfterResults = onboardingResumeAfterCurrentRun;
-    onboardingResumeAfterCurrentRun = false;
+
+    barProgressText.textContent =
+      `Done — ${total} entries verified`;
+
+    const resumeOnboardingAfterResults =
+      onboardingResumeAfterCurrentRun;
+
+    onboardingResumeAfterCurrentRun =
+      false;
+
     setTimeout(() => {
-      barProgress.classList.add("fade-out");
+      barProgress.classList.add(
+        "fade-out"
+      );
+
       setTimeout(() => {
-        barProgress.classList.remove("active", "fade-out");
-        btnDownload.classList.remove("hidden");
-        btnDownload.classList.add("fade-in");
-        if (resumeOnboardingAfterResults)
-          setTimeout(() => openOnboardingPostVerifyTour(), 450);
+        barProgress.classList.remove(
+          "active",
+          "fade-out"
+        );
+
+        btnDownload.classList.remove(
+          "hidden"
+        );
+
+        btnReport?.classList.remove(
+          "hidden"
+        );
+
+        btnDownload.classList.add(
+          "fade-in"
+        );
+
+        if (resumeOnboardingAfterResults) {
+          setTimeout(
+            () =>
+              openOnboardingPostVerifyTour(),
+            450
+          );
+        }
       }, 350);
     }, 800);
   }
