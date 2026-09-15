@@ -704,6 +704,11 @@
     });
   }
 
+  // ─── Review safety ──────────────────────────────────────────────────
+function defaultFieldAction(status) {
+  return status === "updated" ? "found" : "original";
+}
+
   // ─── Public API ──────────────────────────────────────────────────────
   exports.TITLE_MATCH_THRESHOLD = TITLE_MATCH_THRESHOLD;
   exports.MIN_TITLE_SIM = MIN_TITLE_SIM;
@@ -736,6 +741,7 @@
   exports.cleanNote = cleanNote;
   exports.cleanEntryNotes = cleanEntryNotes;
   exports.NOTE_JUNK_KEYS = NOTE_JUNK_KEYS;
+  exports.defaultFieldAction = defaultFieldAction;
   exports.entryMatchesQuery = entryMatchesQuery;
 
 })(typeof module !== "undefined" && module.exports ? module.exports : (window.BibLib = {}));

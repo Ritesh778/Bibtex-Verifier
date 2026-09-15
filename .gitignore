@@ -10,3 +10,8 @@ venv/
 !test_refs.bib
 .cursor/
 node_modules/
+
+# Local verification output
+verification-report.json
+bibtex_verification_report.json
+verified_refs.bib

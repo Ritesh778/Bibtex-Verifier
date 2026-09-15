@@ -2,6 +2,8 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="favicon.svg" />
+  <meta name="bibtex-verifier-api" content="" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="google-site-verification" content="Ec53uaP67xWogWFEI0Asj4FyQZ3RjAtHp6CcQckrWOI" />
 
@@ -268,8 +270,8 @@
     </section>
 
     <footer class="site-footer info-section">
-      <p>Open source under <a href="https://github.com/merfanian/Bibtex-Verifier/blob/main/LICENSE" target="_blank">MIT License</a>
-        &middot; <a href="https://github.com/merfanian/Bibtex-Verifier" target="_blank">GitHub</a>
+      <p>Open source under <a href="https://github.com/Ritesh778/Bibtex-Verifier/blob/main/LICENSE" target="_blank">MIT License</a>
+        &middot; <a href="https://github.com/Ritesh778/Bibtex-Verifier" target="_blank">GitHub</a>
         &middot; <button type="button" class="footer-tour-link" id="footer-start-tour">Quick tour</button></p>
     </footer>
 
@@ -348,12 +350,16 @@
         <div class="bar-progress-text">Preparing...</div>
       </div>
 
+      <button class="btn-report hidden" id="btn-report">Download Evidence Report</button>
       <button class="btn-download" id="btn-download">Download Corrected .bib</button>
     </div>
   </div>
 
-  <script src="https://unpkg.com/fuzzball@2.2.3/dist/fuzzball.umd.min.js"></script>
+  <script src="https://unpkg.com/fuzzball@2.2.3/dist/fuzzball.umd.min.js"
+          integrity="sha384-8BRjdnXwCkdLrqPpJxJG0MmEho7S+N4GOxRKcBWiMNtnjzR6ZQOFvNT1WjdGBLNG"
+          crossorigin="anonymous"></script>
   <script src="lib.js"></script>
+  <script src="backend-api.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

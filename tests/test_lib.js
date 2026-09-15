@@ -774,6 +774,22 @@ test("strips LaTeX from title before matching", () => {
   assert.strictEqual(lib.entryMatchesQuery(e, "café"), true);
 });
 
+
+// ═══════════════════════════════════════════════════════════════════════
+console.log("\n── defaultFieldAction ──");
+
+test("auto-updated entries adopt suggested values", () => {
+  assert.strictEqual(lib.defaultFieldAction("updated"), "found");
+});
+
+test("needs-review entries preserve original values", () => {
+  assert.strictEqual(lib.defaultFieldAction("needs_review"), "original");
+});
+
+test("verified entries preserve original values", () => {
+  assert.strictEqual(lib.defaultFieldAction("verified"), "original");
+});
+
 // ═══════════════════════════════════════════════════════════════════════
 console.log("\n══════════════════════════════════");
 console.log(`Results: ${passed} passed, ${failed} failed`);

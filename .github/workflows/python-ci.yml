@@ -1,0 +1,116 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version:
+          - "3.11"
+          - "3.12"
+          - "3.13"
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install project
+        run: python -m pip install -e ".[dev]"
+
+      - name: Check formatting
+        run: ruff format --check src python_tests
+
+      - name: Run lint checks
+        run: ruff check src python_tests
+
+      - name: Run Python tests
+        run: pytest -q
+
+  javascript:
+    name: JavaScript
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+
+      - name: Install JavaScript dependencies
+        run: npm ci
+
+      - name: Check application syntax
+        run: node --check docs/app.js
+
+      - name: Check backend client syntax
+        run: node --check docs/backend-api.js
+
+      - name: Run JavaScript tests
+        run: node tests/test_lib.js
+
+  container:
+    name: Docker build and smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build container
+        run: docker build --tag bibtex-verifier:test .
+
+      - name: Start container
+        run: |
+          docker run \
+            --detach \
+            --name bibtex-verifier-test \
+            --publish 8000:8000 \
+            bibtex-verifier:test
+
+      - name: Wait for application
+        run: |
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:8000/health; then
+              exit 0
+            fi
+            sleep 1
+          done
+
+          docker logs bibtex-verifier-test
+          exit 1
+
+      - name: Check browser interface
+        run: curl --fail --silent --output /dev/null http://127.0.0.1:8000/
+
+      - name: Stop container
+        if: always()
+        run: docker rm --force bibtex-verifier-test
