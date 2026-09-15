@@ -631,7 +631,7 @@
         // Enrichments (original empty) should default to "found" so the suggested
         // value is reflected in the preview without requiring a click. For real
         // diffs, "updated" status auto-adopts; verified/needs_review keeps original.
-        const defaultAction = r.status === "updated" ? "found" : "original";
+        const defaultAction = B.defaultFieldAction(r.status);
 
         if (!fieldEdits[idx][d.field]) {
           fieldEdits[idx][d.field] = {
