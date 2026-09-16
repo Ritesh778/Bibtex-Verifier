@@ -1471,8 +1471,16 @@
         }
       }
 
-      if (s.maxAuthors > 0 && out.author && r.status !== "not_found") {
-        out.author = truncateAuthors(out.author, s.maxAuthors);
+      if (
+        s.maxAuthors > 0 &&
+        out.author &&
+        r.status !== "not_found" &&
+        r.status !== "needs_review"
+      ) {
+        out.author = truncateAuthors(
+          out.author,
+          s.maxAuthors,
+        );
       }
 
       if (s.preferPublished) {
