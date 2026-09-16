@@ -148,6 +148,12 @@ def assess(
     )
 
 
+def has_preprint_doi(publication: Publication) -> bool:
+    doi = normalize_doi(publication.doi)
+
+    return doi.startswith("10.48550/arxiv")
+
+
 def same_work(
     left: Publication,
     right: Publication,
@@ -156,7 +162,11 @@ def same_work(
     right_doi = normalize_doi(right.doi)
 
     if left_doi and right_doi:
-        return left_doi == right_doi
+        if left_doi == right_doi:
+            return True
+
+        if not (has_preprint_doi(left) or has_preprint_doi(right)):
+            return False
 
     if similarity(left.title, right.title) < 85:
         return False

@@ -551,13 +551,50 @@
   // Turn a lookup outcome into a result object: a genuine miss becomes
   // "not_found", otherwise the entry is compared against the found record.
   function buildFoundResult(entry, index, found) {
-    if (!found) return buildResult(entry, index, "not_found", 0, [], {}, null);
-    const cmp = B.compareEntry(entry, found);
-    let fieldDiffs = cmp.field_diffs;
-    if (cmp.status === "needs_review") fieldDiffs = B.fieldDiffsForNeedsReview(entry, found);
-    return buildResult(entry, index, cmp.status, cmp.title_score, fieldDiffs, cmp.suggested, found);
-  }
+    if (!found) {
+      return buildResult(
+        entry,
+        index,
+        "not_found",
+        0,
+        [],
+        {},
+        null,
+      );
+    }
 
+    const cmp = B.compareEntry(
+      entry,
+      found,
+    );
+
+    const backendRequiresReview =
+      found._backendStatus === "needs_review" ||
+      found._backendStatus === "conflict";
+
+    const status = backendRequiresReview
+      ? "needs_review"
+      : cmp.status;
+
+    let fieldDiffs = cmp.field_diffs;
+
+    if (status === "needs_review") {
+      fieldDiffs = B.fieldDiffsForNeedsReview(
+        entry,
+        found,
+      );
+    }
+
+    return buildResult(
+      entry,
+      index,
+      status,
+      cmp.title_score,
+      fieldDiffs,
+      cmp.suggested,
+      found,
+    );
+  }
   // ─── Rendering ────────────────────────────────────────────────────
   function statusLabel(s) {
     return { verified: "Verified", updated: "Auto-Updated", needs_review: "Needs Review", not_found: "Not Found" }[s] || s;
