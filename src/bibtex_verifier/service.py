@@ -51,6 +51,108 @@ FIELDS = (
     "publisher",
 )
 
+MERGE_FIELDS = FIELDS + ("url",)
+PUBLISHED_FIELDS = (
+    "year",
+    "journal",
+    "booktitle",
+    "volume",
+    "number",
+    "pages",
+    "publisher",
+    "doi",
+    "url",
+)
+
+
+def is_preprint(record: Publication) -> bool:
+    """Return whether a record represents a repository preprint."""
+
+    journal = record.journal.strip().casefold()
+    booktitle = record.booktitle.strip().casefold()
+    venue = f"{journal} {booktitle}"
+    url = record.url.strip().casefold()
+    doi = normalize_doi(record.doi).casefold()
+
+    return (
+        "arxiv" in venue
+        or journal == "corr"
+        or booktitle == "corr"
+        or "computing research repository" in venue
+        or "biorxiv" in venue
+        or "medrxiv" in venue
+        or "arxiv.org" in url
+        or "biorxiv.org" in url
+        or "medrxiv.org" in url
+        or doi.startswith("10.48550/arxiv")
+    )
+
+
+def metadata_completeness(
+    record: Publication,
+) -> int:
+    """Count useful metadata fields in a publication record."""
+
+    return sum(
+        bool(
+            str(
+                getattr(
+                    record,
+                    field,
+                    "",
+                )
+            ).strip()
+        )
+        for field in MERGE_FIELDS
+    )
+
+
+def same_publication_family(
+    left: Publication,
+    right: Publication,
+) -> bool:
+    """Determine whether records are versions of the same work."""
+
+    if same_work(
+        left,
+        right,
+    ):
+        return True
+
+    # A published version and a preprint can have different DOIs.
+    if not (is_preprint(left) or is_preprint(right)):
+        return False
+
+    if (
+        not left.title
+        or not right.title
+        or similarity(
+            left.title,
+            right.title,
+        )
+        < 85
+    ):
+        return False
+
+    if (
+        left.year
+        and right.year
+        and left.year.isdigit()
+        and right.year.isdigit()
+        and abs(int(left.year) - int(right.year)) > 3
+    ):
+        return False
+
+    return not (
+        left.author
+        and right.author
+        and author_similarity(
+            left.author,
+            right.author,
+        )
+        < 30
+    )
+
 
 class VerificationService:
     def __init__(
@@ -205,13 +307,39 @@ class VerificationService:
 
         ranked = [row for row in all_ranked if row[0].decision != "conflict"]
 
+        # A strong published match must take precedence
+        # over an arXiv or repository version.
+        strong_published = [
+            row
+            for row in ranked
+            if (
+                not is_preprint(row[1])
+                and row[0].confidence >= 60
+                and (
+                    not entry.title
+                    or similarity(
+                        entry.title,
+                        row[1].title,
+                    )
+                    >= 85
+                )
+            )
+        ]
+
+        selection_pool = strong_published or ranked
+
         winner = max(
-            ranked,
-            key=lambda row: row[0].confidence,
+            selection_pool,
+            key=lambda row: (
+                row[0].confidence,
+                metadata_completeness(row[1]),
+            ),
             default=None,
         )
 
-        only_conflicts = all_ranked and all(row[0].decision == "conflict" for row in all_ranked)
+        only_conflicts = bool(all_ranked) and all(
+            row[0].decision == "conflict" for row in all_ranked
+        )
 
         if not winner and only_conflicts:
             evidence, matched, sources = all_ranked[0]
@@ -256,6 +384,11 @@ class VerificationService:
 
         evidence, matched, sources = winner
 
+        matched, protected_published = self._protect_published_original(
+            entry,
+            matched,
+        )
+
         differences = self._differences(
             entry,
             matched,
@@ -263,8 +396,35 @@ class VerificationService:
 
         status = Status.VERIFIED if not differences else Status.SUGGESTED_UPDATES
 
-        if evidence.decision == "low":
+        if evidence.decision == "low" or protected_published:
             status = Status.NEEDS_REVIEW
+
+        if protected_published:
+            evidence.reasons.insert(
+                0,
+                (
+                    "An older or preprint record was found; "
+                    "the existing published metadata was preserved"
+                ),
+            )
+
+        original_is_published = bool(
+            entry.journal.strip() or entry.booktitle.strip()
+        ) and not is_preprint(entry)
+
+        # Never automatically downgrade an existing
+        # conference or journal citation to a preprint.
+        if original_is_published and is_preprint(matched):
+            status = Status.NEEDS_REVIEW
+
+            evidence.reasons.insert(
+                0,
+                (
+                    "Only a preprint record was found; "
+                    "the existing published metadata "
+                    "was preserved for manual review"
+                ),
+            )
 
         result = VerificationResult(
             citation_key=entry.citation_key,
@@ -281,49 +441,144 @@ class VerificationService:
         return result
 
     @staticmethod
+    def _protect_published_original(
+        original: Publication,
+        matched: Publication,
+    ) -> tuple[Publication, bool]:
+        original_is_published = bool(
+            original.journal.strip() or original.booktitle.strip()
+        ) and not is_preprint(original)
+
+        original_year = int(original.year) if original.year.isdigit() else None
+        matched_year = int(matched.year) if matched.year.isdigit() else None
+
+        older_match = (
+            original_year is not None and matched_year is not None and matched_year < original_year
+        )
+
+        publication_needs_protection = original_is_published and (
+            is_preprint(matched) or older_match
+        )
+
+        original_authors = [
+            author.strip() for author in original.author.split(" and ") if author.strip()
+        ]
+
+        matched_authors = [
+            author.strip() for author in matched.author.split(" and ") if author.strip()
+        ]
+
+        matched_is_truncated = "others" in matched.author.casefold()
+
+        author_needs_protection = bool(original.author) and (
+            matched_is_truncated
+            or (matched.author and len(original_authors) > len(matched_authors))
+        )
+
+        if not (publication_needs_protection or author_needs_protection):
+            return matched, False
+
+        protected = matched.model_copy(deep=True)
+
+        if publication_needs_protection:
+            for field in PUBLISHED_FIELDS:
+                original_value = getattr(original, field)
+
+                if original_value:
+                    setattr(
+                        protected,
+                        field,
+                        original_value,
+                    )
+
+        if author_needs_protection:
+            protected.author = original.author
+
+        return protected, True
+
+    @staticmethod
     def _cluster(
         candidates: list[Publication],
-    ) -> list[tuple[Publication, set[str]]]:
-        clusters: list[tuple[Publication, set[str]]] = []
+    ) -> list[
+        tuple[
+            Publication,
+            set[str],
+        ]
+    ]:
+        groups: list[list[Publication]] = []
 
         for candidate in candidates:
-            existing = next(
+            group = next(
                 (
-                    item
-                    for item in clusters
-                    if same_work(
-                        item[0],
-                        candidate,
+                    existing
+                    for existing in groups
+                    if any(
+                        same_publication_family(
+                            record,
+                            candidate,
+                        )
+                        for record in existing
                     )
                 ),
                 None,
             )
 
-            if existing is None:
-                clusters.append(
-                    (
-                        candidate.model_copy(),
-                        {candidate.source},
-                    )
-                )
-                continue
+            if group is None:
+                groups.append([candidate])
+            else:
+                group.append(candidate)
 
-            record, sources = existing
-            sources.add(candidate.source)
+        clusters: list[
+            tuple[
+                Publication,
+                set[str],
+            ]
+        ] = []
 
-            for field in FIELDS:
-                if not getattr(record, field) and getattr(
-                    candidate,
-                    field,
-                ):
-                    setattr(
-                        record,
+        for group in groups:
+            published = [record for record in group if not is_preprint(record)]
+
+            # If a published version exists, preprints
+            # are completely excluded from metadata
+            # selection and merging.
+            eligible = published if published else group
+
+            primary_source = max(
+                eligible,
+                key=metadata_completeness,
+            )
+
+            primary = primary_source.model_copy(deep=True)
+
+            for secondary in eligible:
+                if secondary is primary_source:
+                    continue
+
+                for field in MERGE_FIELDS:
+                    current = getattr(
+                        primary,
                         field,
-                        getattr(
-                            candidate,
-                            field,
-                        ),
                     )
+                    suggested = getattr(
+                        secondary,
+                        field,
+                    )
+
+                    if not current and suggested:
+                        setattr(
+                            primary,
+                            field,
+                            suggested,
+                        )
+
+            sources = {record.source for record in group if record.source}
+
+            clusters.append(
+                (
+                    primary,
+                    sources,
+                )
+            )
 
         return clusters
 

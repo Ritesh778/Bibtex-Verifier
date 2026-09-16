@@ -198,3 +198,87 @@ async def test_service_rejects_batch_above_configured_limit() -> None:
         await service.verify_bibtex(bibtex)
 
     await client.aclose()
+
+
+async def test_published_record_is_preferred_over_preprint() -> None:
+    client = create_client()
+    service = VerificationService(client=client)
+
+    title = "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversations"
+
+    published = Publication(
+        title=title,
+        author="Wu, Qingyun and Bansal, Gagan",
+        year="2024",
+        booktitle="First Conference on Language Modeling",
+        url="https://openreview.net/forum?id=BAakY1hNKs",
+        source="openalex",
+    )
+
+    preprint = Publication(
+        title=title,
+        author="Wu, Qingyun and Bansal, Gagan",
+        year="2023",
+        journal="arXiv",
+        url="https://arxiv.org/abs/2308.08155",
+        source="semantic_scholar",
+    )
+
+    service.providers = [
+        StubProvider("semantic_scholar", [preprint]),
+        StubProvider("openalex", [published]),
+    ]
+
+    result = await service.verify_entry(
+        Publication(
+            citation_key="wu2024autogen",
+            title=title,
+            author="Wu, Qingyun and Bansal, Gagan",
+            year="2024",
+            booktitle="First Conference on Language Modeling",
+        )
+    )
+
+    await client.aclose()
+
+    assert result.matched is not None
+    assert result.matched.year == "2024"
+    assert result.matched.booktitle == ("First Conference on Language Modeling")
+    assert result.matched.journal == ""
+    assert "arxiv.org" not in result.matched.url
+
+
+async def test_preprint_is_used_when_no_published_record_exists() -> None:
+    client = create_client()
+    service = VerificationService(client=client)
+
+    preprint = Publication(
+        title="A Preprint-Only Research Paper",
+        author="Janga, Ritesh",
+        year="2026",
+        journal="arXiv",
+        url="https://arxiv.org/abs/2601.00001",
+        source="semantic_scholar",
+    )
+
+    service.providers = [
+        StubProvider(
+            "semantic_scholar",
+            [preprint],
+        )
+    ]
+
+    result = await service.verify_entry(
+        Publication(
+            citation_key="janga2026preprint",
+            title=preprint.title,
+            author=preprint.author,
+        )
+    )
+
+    await client.aclose()
+
+    assert result.matched is not None
+    assert result.matched.journal == "arXiv"
+    assert result.matched.year == "2026"
+    assert result.matched.url == ("https://arxiv.org/abs/2601.00001")

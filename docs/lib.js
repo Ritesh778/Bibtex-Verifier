@@ -520,20 +520,36 @@
   }
 
   function mergeMetadata(primary, secondary) {
+    const primaryIsPreprint = isPreprint(primary);
+    const secondaryIsPreprint = isPreprint(secondary);
+
+    // A published record must never receive metadata from a preprint.
+    if (!primaryIsPreprint && secondaryIsPreprint) {
+      return {
+        ...primary,
+        _source: `${primary._source || ""}+${secondary._source || ""}`,
+      };
+    }
+
+    // When a published record is discovered after a preprint, use the
+    // published record as the complete canonical record.
+    if (primaryIsPreprint && !secondaryIsPreprint) {
+      return {
+        ...secondary,
+        _source: `${primary._source || ""}+${secondary._source || ""}`,
+      };
+    }
+
     const merged = { ...primary };
-    for (const [k, v] of Object.entries(secondary)) {
-      if (k.startsWith("_")) continue;
-      if (!merged[k] && v) merged[k] = v;
+
+    for (const [key, value] of Object.entries(secondary)) {
+      if (key.startsWith("_")) continue;
+      if (!merged[key] && value) merged[key] = value;
     }
-    // When a preprint (primary) is merged with its published version
-    // (secondary), trust the published venue for bibliographic fields —
-    // above all `year`, which on a preprint is the earlier submission year.
-    if (isPreprint(primary) && !isPreprint(secondary)) {
-      for (const f of PUBLISHED_PREFERRED_FIELDS) {
-        if (secondary[f]) merged[f] = secondary[f];
-      }
-    }
-    merged._source = `${primary._source || ""}+${secondary._source || ""}`;
+
+    merged._source =
+      `${primary._source || ""}+${secondary._source || ""}`;
+
     return merged;
   }
 

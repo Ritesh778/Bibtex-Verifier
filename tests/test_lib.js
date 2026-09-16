@@ -790,6 +790,68 @@ test("verified entries preserve original values", () => {
   assert.strictEqual(lib.defaultFieldAction("verified"), "original");
 });
 
+
+
+
+console.log("\n── published record preference ──");
+
+test("published record completely replaces a preprint", () => {
+  const preprint = {
+    title: "AutoGen",
+    year: "2023",
+    journal: "arXiv",
+    url: "https://arxiv.org/abs/2308.08155",
+    _source: "semantic_scholar",
+  };
+
+  const published = {
+    title: "AutoGen",
+    year: "2024",
+    booktitle: "First Conference on Language Modeling",
+    url: "https://openreview.net/forum?id=BAakY1hNKs",
+    _source: "openalex",
+  };
+
+  const merged = lib.mergeMetadata(preprint, published);
+
+  assert.strictEqual(merged.year, "2024");
+  assert.strictEqual(
+    merged.booktitle,
+    "First Conference on Language Modeling",
+  );
+  assert.strictEqual(merged.journal, undefined);
+  assert.strictEqual(
+    merged.url,
+    "https://openreview.net/forum?id=BAakY1hNKs",
+  );
+});
+
+test("preprint metadata cannot modify a published record", () => {
+  const published = {
+    title: "AutoGen",
+    year: "2024",
+    booktitle: "First Conference on Language Modeling",
+    _source: "openalex",
+  };
+
+  const preprint = {
+    title: "AutoGen",
+    year: "2023",
+    journal: "arXiv",
+    url: "https://arxiv.org/abs/2308.08155",
+    _source: "semantic_scholar",
+  };
+
+  const merged = lib.mergeMetadata(published, preprint);
+
+  assert.strictEqual(merged.year, "2024");
+  assert.strictEqual(
+    merged.booktitle,
+    "First Conference on Language Modeling",
+  );
+  assert.strictEqual(merged.journal, undefined);
+  assert.strictEqual(merged.url, undefined);
+});
 // ═══════════════════════════════════════════════════════════════════════
 console.log("\n══════════════════════════════════");
 console.log(`Results: ${passed} passed, ${failed} failed`);
