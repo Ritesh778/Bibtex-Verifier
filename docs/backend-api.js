@@ -8,10 +8,14 @@
     ?.getAttribute("content")
     ?.trim();
 
+    const isLocalHost =
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1";
+
   const defaultUrl =
-    window.location.port === "8000"
-      ? window.location.origin
-      : "http://127.0.0.1:8000";
+    isLocalHost && window.location.port !== "8000"
+      ? "http://127.0.0.1:8000"
+      : window.location.origin;
 
   const apiBaseUrl = (
     configuredUrl || defaultUrl
