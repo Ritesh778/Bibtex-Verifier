@@ -1322,7 +1322,15 @@
         const res = results[idx];
         if (!entry || !entry.author) return;
         /* No lookup match — don't inject truncation as if it were an API suggestion row */
-        if (res && res.status === "not_found") return;
+                if (
+          res &&
+          (
+            res.status === "not_found" ||
+            res.status === "needs_review"
+          )
+        ) {
+          return;
+        }
 
         const existingRow = card.querySelector('.diff-row[data-field="author"]:not(.field-row-plain)');
         if (existingRow) return; // Already has an API diff row
