@@ -233,6 +233,7 @@
   const previewShowHandle = $("#preview-show-handle");
   const previewCode = $("#preview-code");
   const previewPlaceholder = $(".preview-placeholder");
+  const btnReport = $("#btn-report");
 
   function syncPreviewPanelCollapsed() {
     if (!previewPanelEl || !btnPreviewToggle) return;
@@ -342,6 +343,7 @@
     barProgressText.textContent = statusMsg;
     btnDownload.classList.add("hidden");
     btnDownload.classList.remove("fade-in");
+    btnReport?.classList.add("hidden");
     floatingBar.classList.add("visible");
 
     mainColumns.classList.add("two-col");
@@ -545,6 +547,9 @@
       suggested,
       found_title: found ? (found.title || "") : "",
       duplicate_of: entry._duplicateOf || null,
+      confidence: found?._confidence ?? null,
+      evidence: found?._evidence || null,
+      sources: (found?._source || "").split("+").filter(Boolean),
     };
   }
 
@@ -1708,6 +1713,43 @@
     a.download = "verified_refs.bib";
     a.click();
     URL.revokeObjectURL(url);
+  });
+
+  function triggerDownload(content, filename, type) {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+
+  btnReport?.addEventListener("click", () => {
+    if (!results.length) {
+      alert("Verify at least one reference before downloading an evidence report.");
+      return;
+    }
+
+    try {
+      const report = B.createEvidenceReport({
+        entries: parsedEntries,
+        results,
+        fieldEdits,
+        finalBib: currentPreviewBib || buildPreviewBib(),
+        generatedAt: new Date().toISOString(),
+      });
+      triggerDownload(
+        B.evidenceReportToHtml(report),
+        "bibtex-verification-evidence.html",
+        "text/html;charset=utf-8",
+      );
+    } catch (error) {
+      console.error("Evidence report generation failed:", error);
+      alert("The evidence report could not be created. Please try verification again.");
+    }
   });
 
   // ─── First-visit onboarding tour ───────────────────────────────────

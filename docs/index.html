@@ -41,16 +41,21 @@
   }
   </script>
 
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20260922-2" />
 </head>
 <body>
   <div class="page-wrap">
 
-    <header class="hero">
-      <div class="hero-top">
-        <h1>BibTeX Verifier</h1>
+    <header class="hero product-hero">
+      <div class="hero-top product-nav">
+        <div class="brand-lockup">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" stroke-width="2.3"><path d="M9 12l2 2 4-4"/><path d="M12 3l7 3v5c0 4.7-2.9 8.2-7 10-4.1-1.8-7-5.3-7-10V6l7-3z"/></svg>
+          </span>
+          <span><strong>BibTeX Verifier</strong><small>Evidence-first reference checking</small></span>
+        </div>
         <div class="hero-top-right">
-          <a class="github-star-btn" href="https://github.com/merfanian/Bibtex-Verifier" target="_blank" rel="noopener">
+          <a class="github-star-btn" href="https://github.com/Ritesh778/Bibtex-Verifier" target="_blank" rel="noopener">
             <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></svg>
             Star on GitHub
           </a>
@@ -64,22 +69,52 @@
           </button>
         </div>
       </div>
-      <button type="button" class="hero-overview-toggle" id="hero-overview-toggle" aria-expanded="false" aria-controls="hero-overview">
+      <button type="button" class="hero-overview-toggle" id="hero-overview-toggle" aria-expanded="true" aria-controls="hero-overview">
         <span id="hero-overview-toggle-label">About this tool</span>
         <svg class="hero-overview-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
       </button>
-      <div class="hero-overview" id="hero-overview">
-        <p class="hero-tagline">Catch errors, hallucinated references, and missing metadata before you submit.</p>
-        <p class="hero-lead">Upload a <code>.bib</code> file or paste directly from Overleaf.
-          BibTeX Verifier checks every entry against
-          <a href="https://www.crossref.org/" target="_blank">CrossRef</a> and
-          <a href="https://www.semanticscholar.org/" target="_blank">Semantic Scholar</a>, with
-          <a href="https://openalex.org/" target="_blank">OpenAlex</a> as a fallback, to find
-          wrong authors, incorrect years, mismatched venues, missing DOIs, duplicates,
-          and <strong>AI-hallucinated citations</strong> that don't exist in any database.
-          100% in-browser — your data never leaves your machine.</p>
+      <div class="hero-overview hero-content" id="hero-overview">
+        <div class="hero-copy">
+          <span class="hero-kicker">Built for students, researchers, and reviewers</span>
+          <h1>Verify every citation before it reaches your paper.</h1>
+          <p class="hero-lead">Upload or paste a bibliography. We compare each reference with trusted scholarly records, protect published versions from preprint downgrades, and show exactly what needs your attention.</p>
+          <div class="hero-benefits" aria-label="Key benefits">
+            <span><b>✓</b> No blind replacements</span>
+            <span><b>✓</b> Field-level evidence</span>
+            <span><b>✓</b> Corrected BibTeX export</span>
+          </div>
+        </div>
+        <aside class="source-panel" aria-label="Verification coverage">
+          <span class="source-panel-label">Current verification sources</span>
+          <div class="source-list"><span>Crossref</span><span>Semantic Scholar</span><span>OpenAlex</span></div>
+          <div class="source-separator"></div>
+          <div class="source-stat"><strong>5</strong><span>clear result categories</span></div>
+          <div class="source-stat"><strong>1</strong><span>evidence report for every run</span></div>
+        </aside>
       </div>
     </header>
+
+    <section class="quick-start" aria-labelledby="quick-start-title">
+      <div class="quick-start-heading">
+        <span class="eyebrow">Reference checking made simple</span>
+        <h2 id="quick-start-title">Verify your bibliography in three steps</h2>
+      </div>
+      <ol class="quick-start-steps">
+        <li><span>1</span><div><strong>Add BibTeX</strong><small>Upload a file or paste from Overleaf</small></div></li>
+        <li><span>2</span><div><strong>Review results</strong><small>Check only uncertain references</small></div></li>
+        <li><span>3</span><div><strong>Download</strong><small>Export corrected BibTeX and evidence</small></div></li>
+      </ol>
+    </section>
+
+    <section class="verifier-workspace" aria-labelledby="workspace-title">
+    <div class="workspace-heading">
+      <div>
+        <span class="eyebrow">Step 1</span>
+        <h2 id="workspace-title">Add your bibliography</h2>
+        <p>Choose either method below. Your original references remain visible while you review suggestions.</p>
+      </div>
+      <div class="workspace-assurance"><span>✓</span> Supports BibTeX and BibLaTeX</div>
+    </div>
 
     <div class="input-tabs">
       <button class="input-tab active" data-tab="upload">Upload file</button>
@@ -90,7 +125,7 @@
       <div class="upload-zone">
         <span class="icon">&#128462;</span>
         <span class="label">Drop your .bib file here or click to browse</span>
-        <p>Standard BibTeX &amp; BibLaTeX &middot; Processed entirely in your browser</p>
+        <p>Standard BibTeX &amp; BibLaTeX &middot; Securely sent to the verification service</p>
         <input type="file" id="file-input" accept=".bib" />
       </div>
     </div>
@@ -99,8 +134,13 @@
       <textarea id="bib-paste" class="bib-textarea" placeholder="Paste your BibTeX content here, e.g. from Overleaf...&#10;&#10;@article{example2024,&#10;  title={Your Paper Title},&#10;  author={Author, First and Author, Second},&#10;  year={2024},&#10;  journal={Some Journal}&#10;}"></textarea>
       <button class="btn-verify-paste" id="btn-verify-paste">Verify pasted BibTeX</button>
     </div>
+    </section>
 
     <div class="results-section">
+      <div class="results-heading">
+        <div><span class="eyebrow">Steps 2–3</span><h2>Review verification results</h2></div>
+        <p>Select a status to filter the list. “Needs Review” keeps your original value until you approve a suggestion.</p>
+      </div>
       <div class="summary-bar">
         <button type="button" class="summary-badge badge-verified active" data-filter="verified">
           <span class="summary-dot"></span>
@@ -183,7 +223,7 @@
         <div class="step">
           <div class="step-num">1</div>
           <h3>Upload or paste</h3>
-          <p>Drop your <code>.bib</code> file or paste directly from Overleaf. Everything is parsed in your browser — nothing is uploaded to any server.</p>
+        <p>Drop your <code>.bib</code> file or paste directly from Overleaf. The verification service parses it and checks each reference against trusted scholarly sources.</p>
         </div>
         <div class="step">
           <div class="step-num">2</div>
@@ -226,7 +266,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#128274;</div>
           <h3>Privacy-first</h3>
-          <p>Your file never leaves the browser. Only paper titles are sent to public academic APIs for lookup. No server, no tracking.</p>
+          <p>Your bibliography is sent only to the verification service so its references can be checked. The application does not provide account-based storage for uploaded files.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128221;</div>
@@ -249,7 +289,7 @@
       </details>
       <details>
         <summary>Is my data safe?</summary>
-        <p>Yes. Your <code>.bib</code> file is parsed entirely in your browser using JavaScript. The only network requests made are title lookups to the public Semantic Scholar, CrossRef, and OpenAlex APIs. No file content is sent to any server.</p>
+        <p>Your <code>.bib</code> content is sent to the verification service for processing and is not stored in a user account. The service queries public scholarly APIs to verify the references.</p>
       </details>
       <details>
         <summary>Why are some entries "Not Found"?</summary>
@@ -265,7 +305,7 @@
       </details>
       <details>
         <summary>Is this open source?</summary>
-        <p>Yes! The full source code is on <a href="https://github.com/merfanian/Bibtex-Verifier" target="_blank">GitHub</a> under the MIT license. Contributions are welcome.</p>
+        <p>Yes! The full source code is on <a href="https://github.com/Ritesh778/Bibtex-Verifier" target="_blank">GitHub</a> under the MIT license. Contributions are welcome.</p>
       </details>
     </section>
 
@@ -350,16 +390,22 @@
         <div class="bar-progress-text">Preparing...</div>
       </div>
 
-      <button class="btn-report hidden" id="btn-report">Download Evidence Report</button>
-      <button class="btn-download" id="btn-download">Download Corrected .bib</button>
+      <button type="button" class="btn-report hidden" id="btn-report" title="Download a readable report of matches, changes, confidence, and sources">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+        Evidence Report
+      </button>
+      <button type="button" class="btn-download" id="btn-download">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Corrected .bib
+      </button>
     </div>
   </div>
 
   <script src="https://unpkg.com/fuzzball@2.2.3/dist/fuzzball.umd.min.js"
           integrity="sha384-8BRjdnXwCkdLrqPpJxJG0MmEho7S+N4GOxRKcBWiMNtnjzR6ZQOFvNT1WjdGBLNG"
           crossorigin="anonymous"></script>
-  <script src="lib.js"></script>
-  <script src="backend-api.js"></script>
-  <script src="app.js"></script>
+  <script src="lib.js?v=20260922-2"></script>
+  <script src="backend-api.js?v=20260922-2"></script>
+  <script src="app.js?v=20260922-2"></script>
 </body>
 </html>
