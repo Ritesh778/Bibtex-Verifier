@@ -790,6 +790,37 @@ test("verified entries preserve original values", () => {
   assert.strictEqual(lib.defaultFieldAction("verified"), "original");
 });
 
+console.log("\n── evidence report ──");
+
+test("builds a report with selected field values and source evidence", () => {
+  const report = lib.createEvidenceReport({
+    entries: [{ ID: "paper2024", title: "Paper", year: "2023" }],
+    results: [{
+      entry_id: "paper2024", title: "Paper", status: "updated", confidence: 98,
+      sources: ["crossref"], evidence: { reasons: ["Exact title match"], signals: {} },
+      field_diffs: [{ field: "year", original: "2023", found: "2024", source: "crossref" }],
+    }],
+    fieldEdits: { 0: { year: { action: "found", value: "2024" } } },
+    finalBib: "@article{paper2024, year={2024}}",
+    generatedAt: "2026-09-22T00:00:00.000Z",
+  });
+  assert.strictEqual(report.summary.updated, 1);
+  assert.strictEqual(report.entries[0].changes[0].selected, "2024");
+  assert.strictEqual(report.entries[0].changes[0].source, "crossref");
+});
+
+test("renders a standalone readable evidence report", () => {
+  const html = lib.evidenceReportToHtml(lib.createEvidenceReport({
+    entries: [{ ID: "x", title: "A <Paper>" }],
+    results: [{ entry_id: "x", title: "A <Paper>", status: "verified", field_diffs: [] }],
+    finalBib: "@article{x}",
+  }));
+  assert.ok(html.startsWith("<!doctype html>"));
+  assert.ok(html.includes("BibTeX Verification Evidence Report"));
+  assert.ok(html.includes("A &lt;Paper&gt;"));
+  assert.ok(!html.includes("A <Paper>"));
+});
+
 
 
 

@@ -725,6 +725,76 @@ function defaultFieldAction(status) {
   return status === "updated" ? "found" : "original";
 }
 
+  // ─── Evidence report ───────────────────────────────────────────────
+  function createEvidenceReport({ entries = [], results = [], fieldEdits = {}, finalBib = "", generatedAt } = {}) {
+    const summary = { verified: 0, updated: 0, needs_review: 0, not_found: 0, duplicates: 0 };
+    const reportEntries = results.map((result, index) => {
+      const original = entries[index] || {};
+      const status = result.status || "not_found";
+      summary[status] = (summary[status] || 0) + 1;
+      if (result.duplicate_of) summary.duplicates++;
+
+      const edits = fieldEdits[index] || {};
+      const changes = (result.field_diffs || []).map(diff => {
+        const edit = edits[diff.field] || {};
+        const action = edit.action || defaultFieldAction(status);
+        let selected = diff.original || "";
+        if (action === "found" || action === "custom") selected = edit.value || diff.found || "";
+        if (action === "remove") selected = "";
+        return {
+          field: diff.field,
+          original: diff.original || "",
+          suggested: diff.found || "",
+          selected,
+          action,
+          source: diff.source || (result.sources || []).join(", "),
+        };
+      });
+
+      return {
+        citation_key: result.entry_id || original.ID || "",
+        title: result.title || original.title || "",
+        status,
+        confidence: result.confidence,
+        duplicate_of: result.duplicate_of || null,
+        sources: result.sources || [],
+        reasons: result.evidence?.reasons || [],
+        signals: result.evidence?.signals || {},
+        changes,
+      };
+    });
+
+    return {
+      schema_version: "1.0",
+      generated_at: generatedAt || new Date().toISOString(),
+      summary,
+      entries: reportEntries,
+      corrected_bibtex: finalBib,
+    };
+  }
+
+  function evidenceReportToHtml(report) {
+    const h = value => String(value ?? "")
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+    const statusName = status => ({
+      verified: "Verified", updated: "Auto-Updated", needs_review: "Needs Review",
+      not_found: "Not Found",
+    }[status] || status);
+    const entryHtml = report.entries.map(entry => {
+      const changes = entry.changes.length
+        ? `<table><thead><tr><th>Field</th><th>Original</th><th>Suggested</th><th>Selected</th><th>Evidence</th></tr></thead><tbody>${entry.changes.map(change =>
+          `<tr><td>${h(change.field)}</td><td>${h(change.original) || "—"}</td><td>${h(change.suggested) || "—"}</td><td>${h(change.selected) || "Removed"}</td><td>${h(change.source) || "—"}</td></tr>`
+        ).join("")}</tbody></table>`
+        : "<p class=\"muted\">No field changes were proposed.</p>";
+      const reasons = entry.reasons.length
+        ? `<ul>${entry.reasons.map(reason => `<li>${h(reason)}</li>`).join("")}</ul>` : "";
+      return `<article><div class="entry-head"><div><h2>${h(entry.title) || "Untitled reference"}</h2><p>${h(entry.citation_key)}</p></div><span class="status ${h(entry.status)}">${h(statusName(entry.status))}</span></div><p><strong>Confidence:</strong> ${entry.confidence == null ? "Not available" : `${h(entry.confidence)}%`} &nbsp; <strong>Sources:</strong> ${entry.sources.length ? h(entry.sources.join(", ")) : "No authoritative match"}</p>${reasons}${changes}</article>`;
+    }).join("");
+    const s = report.summary;
+    return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BibTeX Verification Evidence Report</title><style>body{font:15px/1.55 system-ui,sans-serif;color:#172033;background:#f4f7fb;margin:0}.wrap{max-width:1100px;margin:auto;padding:32px}header,article,.bib{background:#fff;border:1px solid #dce3ee;border-radius:14px;padding:24px;margin-bottom:18px}h1,h2{margin:0 0 8px}h2{font-size:18px}.summary{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}.summary span,.status{padding:6px 10px;border-radius:999px;background:#edf2f8;font-weight:700}.entry-head{display:flex;justify-content:space-between;gap:16px}.entry-head p,.muted{color:#667085}.verified{color:#2563eb}.updated{color:#087f5b}.needs_review{color:#9a6700}.not_found{color:#c92a2a}table{width:100%;border-collapse:collapse;margin-top:14px}th,td{text-align:left;vertical-align:top;padding:10px;border-bottom:1px solid #e7ebf1}th{font-size:12px;text-transform:uppercase;color:#667085}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#111827;color:#e5e7eb;padding:18px;border-radius:10px}@media(max-width:700px){.wrap{padding:14px}table{display:block;overflow-x:auto}.entry-head{display:block}.status{display:inline-block;margin-top:8px}}</style></head><body><main class="wrap"><header><h1>BibTeX Verification Evidence Report</h1><p>Generated ${h(report.generated_at)}. This report records the matches, decisions, corrections, and sources used during verification.</p><div class="summary"><span>${s.verified || 0} Verified</span><span>${s.updated || 0} Auto-Updated</span><span>${s.needs_review || 0} Needs Review</span><span>${s.not_found || 0} Not Found</span><span>${s.duplicates || 0} Duplicates</span></div></header>${entryHtml}<section class="bib"><h2>Corrected BibTeX</h2><pre>${h(report.corrected_bibtex)}</pre></section></main></body></html>`;
+  }
+
   // ─── Public API ──────────────────────────────────────────────────────
   exports.TITLE_MATCH_THRESHOLD = TITLE_MATCH_THRESHOLD;
   exports.MIN_TITLE_SIM = MIN_TITLE_SIM;
@@ -759,5 +829,7 @@ function defaultFieldAction(status) {
   exports.NOTE_JUNK_KEYS = NOTE_JUNK_KEYS;
   exports.defaultFieldAction = defaultFieldAction;
   exports.entryMatchesQuery = entryMatchesQuery;
+  exports.createEvidenceReport = createEvidenceReport;
+  exports.evidenceReportToHtml = evidenceReportToHtml;
 
 })(typeof module !== "undefined" && module.exports ? module.exports : (window.BibLib = {}));

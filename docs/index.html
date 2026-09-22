@@ -77,9 +77,29 @@
           <a href="https://openalex.org/" target="_blank">OpenAlex</a> as a fallback, to find
           wrong authors, incorrect years, mismatched venues, missing DOIs, duplicates,
           and <strong>AI-hallucinated citations</strong> that don't exist in any database.
-          100% in-browser — your data never leaves your machine.</p>
+          The verification service processes your bibliography only to perform these checks.</p>
       </div>
     </header>
+
+    <section class="quick-start" aria-labelledby="quick-start-title">
+      <div class="quick-start-heading">
+        <span class="eyebrow">Reference checking made simple</span>
+        <h2 id="quick-start-title">Verify your bibliography in three steps</h2>
+      </div>
+      <ol class="quick-start-steps">
+        <li><span>1</span><div><strong>Add BibTeX</strong><small>Upload a file or paste from Overleaf</small></div></li>
+        <li><span>2</span><div><strong>Review results</strong><small>Check only uncertain references</small></div></li>
+        <li><span>3</span><div><strong>Download</strong><small>Export corrected BibTeX and evidence</small></div></li>
+      </ol>
+    </section>
+
+    <div class="workspace-heading">
+      <div>
+        <span class="eyebrow">Step 1</span>
+        <h2>Add your bibliography</h2>
+        <p>Choose either method below. Your original references remain visible while you review suggestions.</p>
+      </div>
+    </div>
 
     <div class="input-tabs">
       <button class="input-tab active" data-tab="upload">Upload file</button>
@@ -101,6 +121,10 @@
     </div>
 
     <div class="results-section">
+      <div class="results-heading">
+        <div><span class="eyebrow">Steps 2–3</span><h2>Review verification results</h2></div>
+        <p>Select a status to filter the list. “Needs Review” keeps your original value until you approve a suggestion.</p>
+      </div>
       <div class="summary-bar">
         <button type="button" class="summary-badge badge-verified active" data-filter="verified">
           <span class="summary-dot"></span>
@@ -183,7 +207,7 @@
         <div class="step">
           <div class="step-num">1</div>
           <h3>Upload or paste</h3>
-          <p>Drop your <code>.bib</code> file or paste directly from Overleaf. Everything is parsed in your browser — nothing is uploaded to any server.</p>
+        <p>Drop your <code>.bib</code> file or paste directly from Overleaf. The verification service parses it and checks each reference against trusted scholarly sources.</p>
         </div>
         <div class="step">
           <div class="step-num">2</div>
@@ -226,7 +250,7 @@
         <div class="feature-card">
           <div class="feature-icon">&#128274;</div>
           <h3>Privacy-first</h3>
-          <p>Your file never leaves the browser. Only paper titles are sent to public academic APIs for lookup. No server, no tracking.</p>
+          <p>Your bibliography is sent only to the verification service so its references can be checked. The application does not provide account-based storage for uploaded files.</p>
         </div>
         <div class="feature-card">
           <div class="feature-icon">&#128221;</div>
@@ -249,7 +273,7 @@
       </details>
       <details>
         <summary>Is my data safe?</summary>
-        <p>Yes. Your <code>.bib</code> file is parsed entirely in your browser using JavaScript. The only network requests made are title lookups to the public Semantic Scholar, CrossRef, and OpenAlex APIs. No file content is sent to any server.</p>
+        <p>Your <code>.bib</code> content is sent to the verification service for processing and is not stored in a user account. The service queries public scholarly APIs to verify the references.</p>
       </details>
       <details>
         <summary>Why are some entries "Not Found"?</summary>
@@ -350,8 +374,14 @@
         <div class="bar-progress-text">Preparing...</div>
       </div>
 
-      <button class="btn-report hidden" id="btn-report">Download Evidence Report</button>
-      <button class="btn-download" id="btn-download">Download Corrected .bib</button>
+      <button type="button" class="btn-report hidden" id="btn-report" title="Download a readable report of matches, changes, confidence, and sources">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="14" y2="17"/></svg>
+        Evidence Report
+      </button>
+      <button type="button" class="btn-download" id="btn-download">
+        <svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Corrected .bib
+      </button>
     </div>
   </div>
 
